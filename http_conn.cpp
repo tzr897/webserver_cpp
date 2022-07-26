@@ -199,8 +199,33 @@ Http_conn::HTTP_CODE Http_conn::parse_request_line(char *text) {
     return NO_REQUEST;
 }
 
+// analyze the headers of HTTP request
 Http_conn::HTTP_CODE Http_conn::parse_headers(char *text) {
-    
+    // if it is an empty line, it means headers have been analyzed
+    if (text[0] == '\0') {
+        if (m_content_length != 0) {
+            m_check_state = CHECK_STATE_CONTENT;
+            return NO_REQUEST;
+        }
+        return GET_REQUEST;
+    } else if (strncasecmp(text, "Connection:", 11) == 0) {
+        text += 11;
+        text += strspn(text, " \t");
+        if (strcasecmp(text, "keep-alive") == 0) {
+            m_linger = true;
+        }
+    } else if (strncasecmp(text, "Content-Length:", 15) == 0) {
+        text += 15;
+        text += strspn(text, " \t");
+        m_content_length = atol(text);
+    } else if (strncasecmp( text, "Host:", 5 ) == 0) {
+        text += 5;
+        text += strspn( text, " \t" );
+        m_host = text;
+    } else {
+        printf("oop! unknow header %s\n", text);
+    }
+    return NO_REQUEST;
 }
 
 
