@@ -197,11 +197,10 @@ Http_conn::HTTP_CODE Http_conn::parse_request_line(char *text) {
     }
     m_check_state = CHECK_STATE_HEADER;
     return NO_REQUEST;
+}
 
-
-
-
-
+Http_conn::HTTP_CODE Http_conn::parse_headers(char *text) {
+    
 }
 
 
