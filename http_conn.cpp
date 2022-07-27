@@ -228,9 +228,187 @@ Http_conn::HTTP_CODE Http_conn::parse_headers(char *text) {
     return NO_REQUEST;
 }
 
+// whether content has been read completely
+Http_conn::HTTP_CODE Http_conn::parse_content(char *text) {
+    if (m_read_idx >= m_checked_idx + m_content_length) {
+        text[m_content_length] = '\0';
+        return GET_REQUEST;
+    }
+    return NO_REQUEST;
+}
+
+// main FSM
+// analyze the request
+Http_conn::HTTP_CODE Http_conn::process_read() {
+    // initial status
+    LINE_STATUS line_status = LINE_OK;
+    HTTP_CODE ret = NO_REQUEST;
+    
+    char *text = 0;
+    while ( 
+            ((m_check_state == CHECK_STATE_CONTENT) && (line_status == LINE_OK))
+            ||
+            ((line_status = parse_line()) == LINE_OK)
+          )  // analyze a complete line, or analyze the request completely
+    {
+        // get one line of data
+        text = get_line();
+        m_start_line = m_checked_idx;
+        printf("got 1 http line: %s\n", text);
+
+        switch (m_check_state) {
+            case CHECK_STATE_REQUESTLINE : {
+                ret = parse_request_line(text);
+                if (ret == BAD_REQUEST) {
+                    return BAD_REQUEST;
+                }
+                break;
+            }
+            case CHECK_STATE_HEADER : {
+                ret = parse_headers(text);
+                if (ret == BAD_REQUEST) {
+                    return BAD_REQUEST;
+                } else if (ret == GET_REQUEST) {
+                    return do_request();
+                }
+                break;
+            }
+            case CHECK_STATE_CONTENT : {
+                ret = parse_content(text);
+                if (ret == GET_REQUEST) {
+                    return do_request();
+                }
+                line_status = LINE_OPEN;
+                break;
+            }
+            default: {
+                return INTERNAL_ERROR;
+                break;
+            }
+        }
+    }
+    return NO_REQUEST;
+}
+
+// when getting a complete and correct HTTP request,  analyze the properties of target file
+// if target file exists can public to all users, and it is not a directory
+// use mmap() to map it to m_file_address in the memory, and notice who calls it
+Http_conn::HTTP_CODE Http_conn::do_request() {
+    strcpy(m_real_file, doc_root);
+    int len = strlen(doc_root);
+    strncpy(m_real_file + len, m_url, FILENAME_LEN - len - 1);
+
+    // status of m_real_file
+    if (stat(m_real_file, &m_file_stat) < 0) {
+        return NO_RESOURCE;
+    }
+
+    // whether the target file can be visited
+    if (!(m_file_stat.st_mode & S_IROTH)) {
+        return FORBIDDEN_REQUEST;
+    }
+
+    // whether the target file is a directory
+    if (S_ISDIR(m_file_stat.st_mode)) {
+        return BAD_REQUEST;
+    }
+
+    // open the file in O_RDONLY
+    int fd = open(m_real_file, O_RDONLY);
+
+    // create the mmap
+    m_file_address = (char*)mmap(0, m_file_stat.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
+    
+    close(fd);
+    return FILE_REQUEST;
+}
+
+// munmap
+void Http_conn::unmap() {
+    if (m_file_address) {
+        munmap(m_file_address, m_file_stat.st_size);
+        m_file_address = 0;
+    }
+}
+
+// HTTP response
+bool Http_conn::write() {
+    int temp = 0;
+    int bytes_have_send = 0;
+    int bytes_to_send = m_write_idx;
+
+    if (bytes_to_send == 0) {
+        // no bytes to send, response ends
+        modfd(m_epollfd, m_sockfd, EPOLLIN);
+        init();
+        return true;
+    }
+
+    while (true) {
+        temp = writev(m_sockfd, m_iv, m_iv_count);
+        if (temp <= -1) {
+            // if  writing buffer is full, wait for next EPOLLOUT event
+            // although the server cannot receive the next request from the same clinet during waiting
+            // the connection can keep complete
+            if (errno == EAGAIN) {
+                modfd(m_epollfd, m_sockfd, EPOLLOUT);
+                return true;
+            }
+            unmap();
+            return false;
+        }
+
+        bytes_to_send -= temp;
+        bytes_have_send += temp;
+
+        if (bytes_to_send <= bytes_have_send) {
+            // succeed sending HTTP response
+            // decide whether the connection should be close immediately by mlinger
+            unmap();
+            if (m_linger) {
+                init();
+                modfd(m_epollfd, m_sockfd, EPOLLIN);
+                return true;
+            } else {
+                modfd(m_epollfd, m_sockfd, EPOLLIN);
+                return false;
+            }
+        }
+    }
+}
 
 
+// write data into writing buffer
+bool Http_conn::add_response(const char *format, ...) {
+    if (m_write_idx >= WRITE_BUFFER_SIZE) {
+        return false;
+    }
 
+    va_list arg_list;
+    va_start(arg_list, format);
 
+    int len = vsnprintf(m_write_buf + m_write_idx, WRITE_BUFFER_SIZE - 1 - m_write_idx, format, arg_list);
+    if (len >= WRITE_BUFFER_SIZE - 1 - m_write_idx) {
+        return false;
+    }
+    m_write_idx += len;
+    va_end(arg_list);
+    return true;
+}
+
+bool Http_conn::add_status_line(int status, const char *title) {
+    return add_response("%s %d %s\r\n", "HTTP/1.1", status, title);
+}
+
+bool Http_conn::add_headers(int content_len) {
+    add_content_length(content_len);
+    add_content_type();
+    add_linger();
+    add_blank_line();
+}
+
+bool Http_conn::add_content_length(int content_len) {
+    return add_response("Content-Length: %d\r\n", content_len);
+}
 
 
