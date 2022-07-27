@@ -1,9 +1,12 @@
-#define the variants
-src=cond.o http_conn.o locker.o sem.o threadpool.o main.o
-target=server
+CXX = g++
+CFLAGS = -std=c++11 -O2 -Wall -g
 
-$(target):$(src)
-	$(CC) $(src) -o $(target)
+TARGET = server
+OBJS = ./src/*.cpp
 
-%.o:%.cpp
-	$(CC) -c $< -o $@
+all: $(OBJS)
+	$(CXX) $(CFLAGS) $(OBJS) -o ./$(TARGET) -pthread
+
+clean:
+	rm ./*.o
+	rm ./$(TARGET)
