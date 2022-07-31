@@ -1,5 +1,6 @@
 #include "threadpool.h"
 
+
 template<typename T>
 Threadpool<T>::Threadpool(int thread_number, int max_requests) : 
 m_thread_number(thread_number),

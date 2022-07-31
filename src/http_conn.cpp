@@ -1,5 +1,23 @@
 #include "http_conn.h"
 
+// the root path of the webpage
+const char *doc_root = "/home/bdth333/project/real/webserver_cpp/resources";
+
+// define the status information of HTTP response
+const char* ok_200_title = "OK";
+const char* error_400_title = "Bad Request";
+const char* error_400_form = "Your request has bad syntax or is inherently impossible to satisfy.\n";
+const char* error_403_title = "Forbidden";
+const char* error_403_form = "You do not have permission to get file from this server.\n";
+const char* error_404_title = "Not Found";
+const char* error_404_form = "The requested file was not found on this server.\n";
+const char* error_500_title = "Internal Error";
+const char* error_500_form = "There was an unusual problem serving the requested file.\n";
+
+Http_conn::Http_conn() {}
+
+Http_conn::~Http_conn() {}
+
 int set_nonblocking(int fd) {
     int old_option = fcntl(fd, F_GETFL);
     int new_option = old_option | O_NONBLOCK;
@@ -41,9 +59,7 @@ void modfd(int epollfd, int fd, int ev) {
 int Http_conn::m_user_count = 0;
 int Http_conn::m_epollfd = -1;
 
-Http_conn::Http_conn() {}
 
-Http_conn::~Http_conn() {}
 
 char* Http_conn::get_line() {
     return m_read_buf + m_start_line;
@@ -405,6 +421,7 @@ bool Http_conn::add_headers(int content_len) {
     add_content_type();
     add_linger();
     add_blank_line();
+    return true;
 }
 
 bool Http_conn::add_content_length(int content_len) {

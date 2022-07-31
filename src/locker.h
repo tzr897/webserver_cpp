@@ -5,6 +5,9 @@
 #include <semaphore.h>
 #include <exception>
 
+// #include "cond.h"
+// #include "sem.h"
+
 // class Locker is used for thread synchronization
 class Locker
 {

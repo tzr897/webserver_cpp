@@ -1,4 +1,7 @@
+#ifndef __SEM__H
 #include "sem.h"
+#endif
+
 
 Sem::Sem() {
     if (sem_init(&m_sem, 0, 0) != 0) {

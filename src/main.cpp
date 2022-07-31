@@ -15,9 +15,11 @@
 #include "sem.h"
 #include "threadpool.h"
 #include "http_conn.h"
+#include "threadpool.cpp"
 
 #define MAX_FD 65536 // maximum number of fd
 #define MAX_EVENT_NUMBER 10000 // maximum number of events listened
+
 
 // definition is in http_conn.cpp
 extern void addfd(int epollfd, int fd, bool one_shot); 
@@ -40,10 +42,11 @@ int main(int argc, char *argv[]) {
     int port = atoi(argv[1]);
     addsig(SIGPIPE, SIG_IGN);
 
-    Threadpool<Http_conn> *pool = NULL;
+    Threadpool< Http_conn > *pool = NULL;
     try {
-        pool = new Threadpool<Http_conn>;
+        pool = new Threadpool< Http_conn >;
     } catch(...) {
+        printf("nonono\n");
         return 1;
     }
 
@@ -52,7 +55,7 @@ int main(int argc, char *argv[]) {
     // create the socket
     int listenfd = socket(PF_INET, SOCK_STREAM, 0);
 
-    int ret = 0;
+    int ret;
     struct sockaddr_in address;
     address.sin_addr.s_addr = INADDR_ANY;
     address.sin_family = AF_INET;
@@ -134,3 +137,4 @@ int main(int argc, char *argv[]) {
 
     return 0;
 }
+
