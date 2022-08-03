@@ -129,6 +129,12 @@ private:
     // number of memory blocks written
     int m_iv_count;
 
+    // number of bytes that will be sent
+    int bytes_to_send;
+
+    // number of bytes that have been sent
+    int bytes_have_send;
+
 public:
     Http_conn();
 

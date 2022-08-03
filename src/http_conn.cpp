@@ -94,6 +94,10 @@ void Http_conn::init(int sockfd, const sockaddr_in& addr) {
 
 // the meaning is different from the init(int sockfd, const sockaddr_in& addr) above
 void Http_conn::init() {
+    bytes_to_send = 0;
+    bytes_have_send = 0;
+    
+
     // the initial status is checking the request line
     m_check_state = CHECK_STATE_REQUESTLINE;
 
@@ -197,9 +201,9 @@ Http_conn::HTTP_CODE Http_conn::parse_request_line(char *text) {
         return BAD_REQUEST;
     }
     *m_version++ = '\0';
-    if (strcasecmp(m_version, "HTTP/1.1") != 0) {
-        return BAD_REQUEST;
-    }
+    // if (strcasecmp(m_version, "HTTP/1.1") != 0) {
+    //     return BAD_REQUEST;
+    // }
 
     /**
      * http://192.168.110.129:10000/index.html
@@ -350,8 +354,6 @@ void Http_conn::unmap() {
 // HTTP response
 bool Http_conn::write() {
     int temp = 0;
-    int bytes_have_send = 0;
-    int bytes_to_send = m_write_idx;
 
     if (bytes_to_send == 0) {
         // no bytes to send, response ends
@@ -377,16 +379,23 @@ bool Http_conn::write() {
         bytes_to_send -= temp;
         bytes_have_send += temp;
 
-        if (bytes_to_send <= bytes_have_send) {
-            // succeed sending HTTP response
-            // decide whether the connection should be close immediately by mlinger
+        if (bytes_have_send >= m_iv[0].iov_len) {
+            m_iv[0].iov_len = 0;
+            m_iv[1].iov_base = m_file_address + (bytes_have_send - m_write_idx);
+            m_iv[1].iov_len = bytes_to_send;
+        } else {
+            m_iv[0].iov_base = m_write_buf + bytes_have_send;
+            m_iv[0].iov_len = m_iv[0].iov_len - temp;
+        }
+
+        if (bytes_to_send <= 0) {
+            // no data to be sent
             unmap();
+            modfd(m_epollfd, m_sockfd, EPOLLIN);
             if (m_linger) {
                 init();
-                modfd(m_epollfd, m_sockfd, EPOLLIN);
                 return true;
             } else {
-                modfd(m_epollfd, m_sockfd, EPOLLIN);
                 return false;
             }
         }
@@ -491,6 +500,9 @@ bool Http_conn::process_write(HTTP_CODE ret) {
             m_iv[1].iov_base = m_file_address;
             m_iv[1].iov_len = m_file_stat.st_size;
             m_iv_count = 2;
+
+            bytes_to_send = m_write_idx + m_file_stat.st_size;
+            
             return true;
         }
 
