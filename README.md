@@ -1,5 +1,5 @@
 # **Webserver**
-## A Linux webserver developed with C++ (Still being improved...)
+## A Linux webserver developed with C++
 
 
 ## Description
